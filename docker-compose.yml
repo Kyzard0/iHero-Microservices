@@ -1,0 +1,118 @@
+version: '3'
+
+volumes:
+  db_dev: {}
+
+services:
+
+  heroes-service:
+    build: ./backend/services/heroes_service
+    command: bash -c "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend/services/heroes_service:/usr/src/app # Link container volume to local files
+    environment:
+      - DB_HOST=heroes-database
+      - DB_NAME=ihero
+      - DB_USER=ihero
+      - DB_PASS=ihero
+    networks:
+      - ihero
+    depends_on:
+      - heroes-database
+    ports:
+      - 8000:8000
+
+  auth-service:
+    build: ./backend/services/auth_service
+    volumes:
+      - ./backend/services/auth_service:/usr/src/app
+    environment:
+      - MONGO_URI=mongodb+srv://kyzard0:iheropw@cluster0.7crio.mongodb.net/myFirstDatabase?retryWrites=true&w=majority
+      - API_PORT=4001
+      - TOKEN_KEY=iherotoken
+      - NODE_ENV=development
+    networks:
+      - ihero
+    ports:
+      - 4001:4001
+
+  threats-service:
+    build: ./backend/services/threats_service
+    volumes:
+      - ./backend/services/threats_service:/usr/src/app
+    ports:
+      - 4002:4002
+    environment:
+      - NODE_ENV=development
+      - MONGO_URI=mongodb+srv://kyzard0:iheropw@cluster0.7crio.mongodb.net/myFirstDatabase?retryWrites=true&w=majority
+      - API_PORT=4002
+      - THREATS_SOCKET=https://zrp-challenge-socket.herokuapp.com
+    networks:
+      - ihero
+
+  battles-service:
+    build: ./backend/services/battles_service
+    volumes:
+      - ./backend/services/battles_service:/usr/src/app
+    ports:
+      - 4003:4003
+    environment:
+      - NODE_ENV=development
+      - MONGO_URI=mongodb+srv://kyzard0:iheropw@cluster0.7crio.mongodb.net/myFirstDatabase?retryWrites=true&w=majority
+      - API_PORT=4003
+      - HEROES_API_URL=http://heroes-service:8000
+      - THREATS_API_URL=http://threats-service:4002
+    networks:
+      - ihero
+    depends_on:
+      - heroes-service
+      - threats-service
+
+  frontend:
+    stdin_open: true
+    build: ./frontend/ihero_frontend
+    volumes:
+      - ./frontend/ihero_frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - 3000:3000
+    environment:
+      - NODE_ENV=development
+    networks:
+      - ihero
+    depends_on:
+      - auth-service
+      - heroes-service
+      - threats-service
+      - battles-service
+
+  heroes-database:
+    image: postgres:9.5
+    restart: on-failure
+    container_name: ihero-database
+    environment:
+      - POSTGRES_DB=ihero
+      - POSTGRES_USER=ihero
+      - POSTGRES_PASSWORD=ihero
+    volumes:
+      - db_dev:/var/lib/postgresql/data
+    networks:
+      - ihero
+    expose:
+      - 5432
+
+  nginx:
+    build: ./nginx
+    ports:
+      - 8080:8080
+    depends_on:
+      - heroes-service
+      - auth-service
+      - threats-service
+      - battles-service
+    networks:
+      - ihero
+
+networks:
+  ihero:
+    driver: bridge

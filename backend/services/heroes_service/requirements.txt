@@ -1,0 +1,6 @@
+Django
+djangorestframework
+geopy
+psycopg2
+ipython
+django-cors-headers
